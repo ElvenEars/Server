@@ -2,9 +2,11 @@ from ServerSocket import ServerSocket
 from Log import Log
 from Sip import SipMessage
 from threading import Thread
+from threading import Event
 import struct
-import time
+
 FLAGE = False
+
 
 class SIP(object):
     def __init__(self, SipSocket, sip_message):
@@ -14,7 +16,6 @@ class SIP(object):
 
     def sip_thread(self, SipSocket, sip_message):
         while True:
-
             self.sip_logic(SipSocket, sip_message)
 
     def sip_logic(self, SipSocket, sip_message):
@@ -48,7 +49,8 @@ class SIP(object):
         if sip_message.get_method() == "INVITE":
             SipSocket.send(sip_message.make_trying().encode(), sipAddr)
             SipSocket.send(sip_message.make_ringing().encode(), sipAddr)
-            sip_message.add_body("v=0\r\no=1001 0 0 IN IP4 10.21.10.125\r\ns=A conversation\r\nc=IN IP4 10.21.10.125\r\nt=0 0\r\nm=audio 30000 RTP/AVP 8\r\na=rtpmap:8 PCMA/8000")
+            sip_message.add_body(
+                "v=0\r\no=1001 0 0 IN IP4 10.21.10.125\r\ns=A conversation\r\nc=IN IP4 10.21.10.125\r\nt=0 0\r\nm=audio 30000 RTP/AVP 8\r\na=rtpmap:8 PCMA/8000")
             SipSocket.send(sip_message.make_OK().encode(), sipAddr)
 
         if sip_message.get_method() == "100":
@@ -58,18 +60,31 @@ class SIP(object):
         if sip_message.get_method() == "180":
             pass
 
-class RTP (object):
 
-    def __init__(self, RtpSocket,sip_message):
-        self.data = b''
+class RTP(object):
+
+    def __init__(self, RtpSocket, sip_message):
+        self._data = b''
         self.RtpSocket = RtpSocket
-        self.rtp_seq_int = 34026
-        self.rtp_time_int = 4150191817
+        self._rtp_seq_int = 0
+        self._rtp_time_int = 0
+        self._timespan = 480
+        self._rtp_version = b'\x90\x08'
+        self._rtp_sync = b'\x4e\x2e\x19\xd9'
+        self._rtp_profile = b'\xe0\x00'
+        self._rtp_ext = b'\x00\x06\x01\x00\x00\x64\x00\xff\xfa\xe0\x00\x00\x03\xe8\x10\xf0\x04\x22\x00\xff\x00\x00\x00\x00\x00\x00'
+        self._rtp_resp1 = b'\x90\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xe0\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x46\x00\x00\x00\x02\x00\x00\x00'
+        self._rtp_resp2 = b'\x90\x08\x00\x00\x60\xf6\x97\x79\x00\x00\x00\x00\xe0\x00\x00\x08\x00\x00\x03\xe8\x00\x00\x00\x00\x00\x00\x03\xe8\x10\xf0\x04\x00\x00\xff\x0f\x00\x00\x00\x00\x00\x13\x0a\x00\x00\x0a\x00\x00\x00'
+        self._rtp_resp3 = b'\x90\x08\x00\x00\x60\xf6\x97\x79\x00\x00\x00\x00\xe0\x00\x00\x08\x00\x00\x00\x64\x00\xff\xfa\xe0\x00\x00\x03\xe8\x10\xf0\x04\x00\x00\xff\x0f\x00\x00\x00\x00\x00\x13\x00\x00\x00\x00\x00\x00\x00'
+        self._start = b'\x90\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xe0\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x006\x00\x00\x00\x02\x00\x03\xe8'
+        self._end = b'\x13\x03\x00\x00\x00\x00\x00\x00'
+        self._extra = b'\xec'
+        self._wav_header = 0
         self.rtp_thread()
 
-    def toWav(self, data):
+    def toWav(self, _data):
         _file = b'RIFF'
-        datalength = len(data)
+        datalength = len(_data)
         _audioformat = 6
         _numofchannels = 1
         _samplerate = 8000
@@ -80,64 +95,54 @@ class RTP (object):
                               int(_numofchannels * _samplerate * (_bitspersample / 8)),
                               int(_numofchannels * (_bitspersample / 8)), _bitspersample, 0,
                               b'fact', 4,
-                              datalength, b'data'))
+                              datalength, b'_data'))
 
         _file += (struct.pack('<L', datalength))
-        _file += (data)
+        self._wav_header = len(_file)
+        _file += (_data)
         return _file
+
+    def _generate_rtp_header(self):
+        self._rtp_seq_int = self._rtp_seq_int + 1
+        rtp_seq = self._rtp_seq_int.to_bytes(2, byteorder='big')
+        self._rtp_time_int = self._rtp_time_int + self._timespan
+        rtp_time = self._rtp_time_int.to_bytes(4, byteorder='big')
+        rtp_header = self._rtp_version + rtp_seq + rtp_time + self._rtp_sync + self._rtp_profile + self._rtp_ext
+        return rtp_header
 
     def rtp_logic(self):
         rtpData, rtpAddr = self.RtpSocket.recive()
-        start = b'\x90\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xe0\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x006\x00\x00\x00\x02\x00\x03\xe8'
 
-        if rtpData != start:
-            end = b'\x13\x03\x00\x00\x00\x00\x00\x00'
-            extra = b'\xec'
-            if len(rtpData) != 48 and rtpData[47] != extra:
-                self.data += rtpData[43:]
+        if rtpData != self._start:
 
-            if len(rtpData) == 48 and rtpData[40:] == end and len(self.data) != 0:
-                print(len(self.data))
+            if len(rtpData) != 48 and rtpData[47] != self._extra:
+                self._data += rtpData[43:]
+
+            if len(rtpData) == 48 and rtpData[40:] == self._end and len(self._data) != 0:
+                print(len(self._data))
                 wav = open("test.wav", "wb")
-                wav.write(self.toWav(self.data))
+                wav.write(self.toWav(self._data))
                 wav.close()
-                wav = open("test_test.wav", "wb")
-                wav.write(self.data)
-                wav.close()
-                self.data = b''
+                self._data = b''
             Log().to_log(str(rtpData))
         else:
-            wav = open("test_test.wav", 'rb')
-            timespan = 480
-            rtp_version = b'\x90\x08'
-            rtp_sync = b'\x4e\x2e\x19\xd9'
-            rtp_profile = b'\xe0\x00'
-            rtp_ext = b'\x00\x06\x01\x00\x00\x64\x00\xff\xfa\xe0\x00\x00\x03\xe8\x10\xf0\x04\x22\x00\xff\x00\x00\x00\x00\x00\x00'
-            rtp_resp = b'\x90\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xe0\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x46\x00\x00\x00\x02\x00\x00\x00'
-            self.RtpSocket.send(rtp_resp, rtpAddr)
-            rtp_resp = b'\x90\x08\x00\x00\x60\xf6\x97\x79\x00\x00\x00\x00\xe0\x00\x00\x08\x00\x00\x03\xe8\x00\x00\x00\x00\x00\x00\x03\xe8\x10\xf0\x04\x00\x00\xff\x0f\x00\x00\x00\x00\x00\x13\x0a\x00\x00\x0a\x00\x00\x00'
-            self.RtpSocket.send(rtp_resp, rtpAddr)
-            rtp_resp = b'\x90\x08\x00\x00\x60\xf6\x97\x79\x00\x00\x00\x00\xe0\x00\x00\x08\x00\x00\x00\x64\x00\xff\xfa\xe0\x00\x00\x03\xe8\x10\xf0\x04\x00\x00\xff\x0f\x00\x00\x00\x00\x00\x13\x00\x00\x00\x00\x00\x00\x00'
-            self.RtpSocket.send(rtp_resp, rtpAddr)
+            wav = open("test.wav", 'rb')
+            self.RtpSocket.send(self._rtp_resp1, rtpAddr)
+            self.RtpSocket.send(self._rtp_resp2, rtpAddr)
+            self.RtpSocket.send(self._rtp_resp3, rtpAddr)
+            w = wav.read(self._wav_header)
             while True:
-                w = wav.read(timespan)
-                self.rtp_seq_int = self.rtp_seq_int + 1
-                rtp_seq = self.rtp_seq_int.to_bytes(2, byteorder='big')
-                self.rtp_time_int = self.rtp_time_int + timespan
-                rtp_time = self.rtp_time_int.to_bytes(4, byteorder='big')
-                start_rtp = rtp_version + rtp_seq + rtp_time + rtp_sync + rtp_profile + rtp_ext
+                w = wav.read(self._timespan)
                 if len(w) == 0: break
-                print("send = ")
-                print(w)
-                self.RtpSocket.send(start_rtp + bytes(w), rtpAddr)
-                time.sleep(0.048)
+                self.RtpSocket.send(self._generate_rtp_header() + bytes(w), rtpAddr)
+                Event().wait(0.0562)
 
     def rtp_thread(self):
         while True:
             self.rtp_logic()
 
-def main():
 
+def main():
     SipSocket = ServerSocket("10.21.10.125", 19888)
     RtpSocket = ServerSocket("10.21.10.125", 30000)
     sip_message = SipMessage()
@@ -146,9 +151,6 @@ def main():
     sipProcess.start()
     rtpProcess.start()
 
+
 if __name__ == '__main__':
     main()
-
-
-
-
