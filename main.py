@@ -9,61 +9,61 @@ FLAGE = False
 
 
 class SIP(object):
-    def __init__(self, SipSocket, sip_message):
+    def __init__(self, SipSocket):
         self.SipSocket = SipSocket
-        self.sip_message = sip_message
-        self.sip_thread(SipSocket, sip_message)
+        self.sip_message = SipMessage()
+        self.sip_thread(SipSocket)
 
-    def sip_thread(self, SipSocket, sip_message):
+    def sip_thread(self, SipSocket):
         while True:
-            self.sip_logic(SipSocket, sip_message)
+            self.sip_logic(SipSocket)
 
-    def sip_logic(self, SipSocket, sip_message):
+    def sip_logic(self, SipSocket):
         sipData, sipAddr = SipSocket.recive()
         msg = sipData.decode()
-        sip_message.parse(msg)
-        Log().to_log(sip_message.get_method())
+        self.sip_message.parse(msg)
+        Log().to_log(self.sip_message.get_method())
 
-        if sip_message.get_method() == "REGISTER":
-            SipSocket.send(sip_message.make_OK().encode(), sipAddr)
+        if self.sip_message.get_method() == "REGISTER":
+            SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
 
-        if sip_message.get_method() == "OPTIONS":
-            SipSocket.send(sip_message.make_OK().encode(), sipAddr)
-            SipSocket.send(sip_message.make_invite().encode(), sipAddr)
+        if self.sip_message.get_method() == "OPTIONS":
+            SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
+            SipSocket.send(self.sip_message.make_invite().encode(), sipAddr)
 
-        if sip_message.get_method() == "BYE":
-            SipSocket.send(sip_message.make_OK().encode(), sipAddr)
+        if self.sip_message.get_method() == "BYE":
+            SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
 
-        if sip_message.get_method() == "200":
+        if self.sip_message.get_method() == "200":
             pass
 
-        if sip_message.get_method() == "400":
-            Log().to_log(sip_message.get_method())
-            SipSocket.send(sip_message.make_OK().encode(), sipAddr)
+        if self.sip_message.get_method() == "400":
+            Log().to_log(self.sip_message.get_method())
+            SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
 
-        if sip_message.get_method() == "MESSAGE":
-            Log().to_log(sip_message.get_message())
-            Log().to_log(sip_message.get_ais_msg_id())
-            SipSocket.send(sip_message.make_OK().encode(), sipAddr)
+        if self.sip_message.get_method() == "MESSAGE":
+            Log().to_log(self.sip_message.get_message())
+            Log().to_log(self.sip_message.get_ais_msg_id())
+            SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
 
-        if sip_message.get_method() == "INVITE":
-            SipSocket.send(sip_message.make_trying().encode(), sipAddr)
-            SipSocket.send(sip_message.make_ringing().encode(), sipAddr)
-            sip_message.add_body(
+        if self.sip_message.get_method() == "INVITE":
+            SipSocket.send(self.sip_message.make_trying().encode(), sipAddr)
+            SipSocket.send(self.sip_message.make_ringing().encode(), sipAddr)
+            self.sip_message.add_body(
                 "v=0\r\no=1001 0 0 IN IP4 10.21.10.125\r\ns=A conversation\r\nc=IN IP4 10.21.10.125\r\nt=0 0\r\nm=audio 30000 RTP/AVP 8\r\na=rtpmap:8 PCMA/8000")
-            SipSocket.send(sip_message.make_OK().encode(), sipAddr)
+            SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
 
-        if sip_message.get_method() == "100":
-            SipSocket.send(sip_message.make_ack().encode(), sipAddr)
+        if self.sip_message.get_method() == "100":
+            SipSocket.send(self.sip_message.make_ack().encode(), sipAddr)
             pass
 
-        if sip_message.get_method() == "180":
+        if self.sip_message.get_method() == "180":
             pass
 
 
 class RTP(object):
 
-    def __init__(self, RtpSocket, sip_message):
+    def __init__(self, RtpSocket):
         self._data = b''
         self.RtpSocket = RtpSocket
         self._rtp_seq_int = 0
@@ -145,9 +145,8 @@ class RTP(object):
 def main():
     SipSocket = ServerSocket("10.21.10.125", 19888)
     RtpSocket = ServerSocket("10.21.10.125", 30000)
-    sip_message = SipMessage()
-    sipProcess = Thread(target=SIP, args=(SipSocket, sip_message))
-    rtpProcess = Thread(target=RTP, args=(RtpSocket, sip_message))
+    sipProcess = Thread(target=SIP, args=(SipSocket,))
+    rtpProcess = Thread(target=RTP, args=(RtpSocket,))
     sipProcess.start()
     rtpProcess.start()
 
