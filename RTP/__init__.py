@@ -1,4 +1,5 @@
 import struct
+from threading import Event
 
 class RTP(object):
 
