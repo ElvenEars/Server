@@ -12,7 +12,9 @@ class SIP(object):
     def __init__(self, SipSocket):
         self.SipSocket = SipSocket
         self.sip_message = SipMessage()
+        self.RtpSocket = ServerSocket("10.21.10.125", 30000)
         self.sip_thread(SipSocket)
+
 
     def sip_thread(self, SipSocket):
         while True:
@@ -30,6 +32,8 @@ class SIP(object):
         if self.sip_message.get_method() == "OPTIONS":
             SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
             SipSocket.send(self.sip_message.make_invite().encode(), sipAddr)
+            rtpProcess = Thread(target=RTP, args=(self.RtpSocket,))
+            rtpProcess.start()
 
         if self.sip_message.get_method() == "BYE":
             SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
@@ -52,6 +56,8 @@ class SIP(object):
             self.sip_message.add_body(
                 "v=0\r\no=1001 0 0 IN IP4 10.21.10.125\r\ns=A conversation\r\nc=IN IP4 10.21.10.125\r\nt=0 0\r\nm=audio 30000 RTP/AVP 8\r\na=rtpmap:8 PCMA/8000")
             SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
+            rtpProcess = Thread(target=RTP, args=(self.RtpSocket,))
+            rtpProcess.start()
 
         if self.sip_message.get_method() == "100":
             SipSocket.send(self.sip_message.make_ack().encode(), sipAddr)
@@ -144,11 +150,8 @@ class RTP(object):
 
 def main():
     SipSocket = ServerSocket("10.21.10.125", 19888)
-    RtpSocket = ServerSocket("10.21.10.125", 30000)
-    sipProcess = Thread(target=SIP, args=(SipSocket,))
-    rtpProcess = Thread(target=RTP, args=(RtpSocket,))
-    sipProcess.start()
-    rtpProcess.start()
+    SIP(SipSocket)
+
 
 
 if __name__ == '__main__':
