@@ -8,54 +8,63 @@ class SIP(object):
         self.SipSocket = SipSocket
         self.sip_message = SipMessage()
         self.RtpSocket = ServerSocket("10.21.10.125", 30000)
-        self.sip_thread(SipSocket)
+        self.sipAddr = ()
+        self.sip_thread()
 
 
-    def sip_thread(self, SipSocket):
+    def sip_thread(self):
         while True:
-            self.sip_logic(SipSocket)
+            self.sip_logic()
 
-    def sip_logic(self, SipSocket):
-        sipData, sipAddr = SipSocket.recive()
+
+    def press_ptt(self):
+        if self.sipAddr != ():
+            self.SipSocket.send(self.sip_message.make_invite().encode(), self.SipSocket, self.sipAddr)
+            rtpProcess = Thread(target=RTP, args=(self.RtpSocket,))
+            rtpProcess.start()
+        else:
+            Log().to_log("Repeater not connected")
+
+    def sip_logic(self):
+        sipData, sipAddr = self.SipSocket.recive()
+        self.sipAddr = sipAddr
         msg = sipData.decode()
         self.sip_message.parse(msg)
         Log().to_log(self.sip_message.get_method())
 
         if self.sip_message.get_method() == "REGISTER":
-            SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
+            self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
 
         if self.sip_message.get_method() == "OPTIONS":
-            SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
-            SipSocket.send(self.sip_message.make_invite().encode(), sipAddr)
-            rtpProcess = Thread(target=RTP, args=(self.RtpSocket,))
-            rtpProcess.start()
+            self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
+
 
         if self.sip_message.get_method() == "BYE":
-            SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
+            self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
 
         if self.sip_message.get_method() == "200":
             pass
 
         if self.sip_message.get_method() == "400":
             Log().to_log(self.sip_message.get_method())
-            SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
+            self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
 
         if self.sip_message.get_method() == "MESSAGE":
             Log().to_log(self.sip_message.get_message())
             Log().to_log(self.sip_message.get_ais_msg_id())
-            SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
+            self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
 
         if self.sip_message.get_method() == "INVITE":
-            SipSocket.send(self.sip_message.make_trying().encode(), sipAddr)
-            SipSocket.send(self.sip_message.make_ringing().encode(), sipAddr)
+            self.SipSocket.send(self.sip_message.make_trying().encode(), sipAddr)
+            self.SipSocket.send(self.sip_message.make_ringing().encode(), sipAddr)
             self.sip_message.add_body(
                 "v=0\r\no=1001 0 0 IN IP4 10.21.10.125\r\ns=A conversation\r\nc=IN IP4 10.21.10.125\r\nt=0 0\r\nm=audio 30000 RTP/AVP 8\r\na=rtpmap:8 PCMA/8000")
-            SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
+            self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
             rtpProcess = Thread(target=RTP, args=(self.RtpSocket,))
             rtpProcess.start()
 
         if self.sip_message.get_method() == "100":
-            SipSocket.send(self.sip_message.make_ack().encode(), sipAddr)
+            self.SipSocket.send(self.sip_message.make_ack().encode(), sipAddr)
             pass
 
         if self.sip_message.get_method() == "180":
