@@ -2,15 +2,15 @@ from Log import Log
 from threading import Thread
 from RTP import RTP
 from ServerSocket import ServerSocket
+import asyncio
 
 class SIP(object):
     def __init__(self, SipSocket):
         self.SipSocket = SipSocket
         self.sip_message = SipMessage()
         self.RtpSocket = ServerSocket("10.21.10.125", 30000)
-        self.sipAddr = ()
+        self.sipAddr = tuple()
         self.sip_thread()
-
 
     def sip_thread(self):
         while True:
@@ -19,7 +19,7 @@ class SIP(object):
 
     def press_ptt(self):
         if self.sipAddr != ():
-            self.SipSocket.send(self.sip_message.make_invite().encode(), self.SipSocket, self.sipAddr)
+            self.SipSocket.send(self.sip_message.make_invite().encode(), self.sipAddr)
             rtpProcess = Thread(target=RTP, args=(self.RtpSocket,))
             rtpProcess.start()
         else:
@@ -27,7 +27,7 @@ class SIP(object):
 
     def sip_logic(self):
         sipData, sipAddr = self.SipSocket.recive()
-        self.sipAddr = sipAddr
+        self.sipAddr =sipAddr
         msg = sipData.decode()
         self.sip_message.parse(msg)
         Log().to_log(self.sip_message.get_method())
@@ -37,7 +37,7 @@ class SIP(object):
 
         if self.sip_message.get_method() == "OPTIONS":
             self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
-
+            self.press_ptt()
 
         if self.sip_message.get_method() == "BYE":
             self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
