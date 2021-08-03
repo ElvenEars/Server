@@ -1,7 +1,7 @@
-from Log import Log
+from Server.Log import Log
 from threading import Thread
-from RTP import RTP
-from ServerSocket import ServerSocket
+from Server.RTP import RTP
+from Server.ServerSocket import ServerSocket
 import asyncio
 
 class SIP(object):
@@ -9,7 +9,7 @@ class SIP(object):
         self.SipSocket = SipSocket
         self.sip_message = SipMessage()
         self.RtpSocket = ServerSocket("10.21.10.125", 30000)
-        self.sipAddr = tuple()
+        self.sipAddr = {}
         self.sip_thread()
 
     def sip_thread(self):
@@ -19,21 +19,28 @@ class SIP(object):
 
     def press_ptt(self):
         if self.sipAddr != ():
-            self.SipSocket.send(self.sip_message.make_invite().encode(), self.sipAddr)
-            rtpProcess = Thread(target=RTP, args=(self.RtpSocket,))
-            rtpProcess.start()
+            for ip,port in self.sipAddr.items():
+                print(ip + " " + str(port))
+                self.SipSocket.send(self.sip_message.make_invite().encode(), (ip, port))
+                rtpProcess = Thread(target=RTP, args=(self.RtpSocket,))
+                rtpProcess.start()
         else:
             Log().to_log("Repeater not connected")
 
     def sip_logic(self):
         sipData, sipAddr = self.SipSocket.recive()
-        self.sipAddr =sipAddr
+        #self.sipAddr =sipAddr
         msg = sipData.decode()
         self.sip_message.parse(msg)
         Log().to_log(self.sip_message.get_method())
-
         if self.sip_message.get_method() == "REGISTER":
-            self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
+            if sipAddr[0] in self.sipAddr:
+                self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
+            else:
+                self.sipAddr[sipAddr[0]] = int(sipAddr[1])
+                Log().to_log("Add to base: " + sipAddr[0] + " " + str(sipAddr[1]))
+                self.SipSocket.send(self.sip_message.make_unauthorized().encode(), sipAddr)
+
 
         if self.sip_message.get_method() == "OPTIONS":
             self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
