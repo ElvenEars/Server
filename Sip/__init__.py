@@ -2,13 +2,20 @@ from Server.Log import Log
 from threading import Thread
 from Server.RTP import RTP
 from Server.ServerSocket import ServerSocket
-import asyncio
+from Server.Configuration import Configuration
+
+
+class ServerConnection:
+    def __init__(self, socket=tuple(), voice_socket=ServerSocket("", 0)):
+        self.socket = socket
+        self.voice_socket = voice_socket
+
 
 class SIP(object):
     def __init__(self, SipSocket):
         self.SipSocket = SipSocket
         self.sip_message = SipMessage()
-        self.RtpSocket = ServerSocket("10.21.10.125", 30000)
+        self.voice_port = 30000
         self.sipAddr = {}
         self.sip_thread()
 
@@ -16,20 +23,26 @@ class SIP(object):
         while True:
             self.sip_logic()
 
-
-    def press_ptt(self):
+    def transmit(self):
         if self.sipAddr != ():
-            for ip,port in self.sipAddr.items():
-                print(ip + " " + str(port))
-                self.SipSocket.send(self.sip_message.make_invite().encode(), (ip, port))
-                rtpProcess = Thread(target=RTP, args=(self.RtpSocket,))
-                rtpProcess.start()
+            for k in self.sipAddr:
+                self.SipSocket.send(self.sip_message.make_invite().encode(), self.sipAddr[k].socket)
+                Thread(target=RTP, args=(self.sipAddr[k].voice_socket,)).start()
+                print(" transmit to : " + self.sipAddr[k].voice_socket.ip + " : " + str(self.sipAddr[k].voice_socket.port))
+        else:
+            Log().to_log("Repeater not connected")
+
+    def recive(self):
+        if self.sipAddr != ():
+            for k in self.sipAddr:
+                self.SipSocket.send(self.sip_message.make_invite().encode(), self.sipAddr[k].socket)
+                Thread(target=RTP, args=(self.sipAddr[k].voice_socket,)).start()
+                print(" recive to : " + self.sipAddr[k].voice_socket.ip + " : " + str(self.sipAddr[k].voice_socket.port))
         else:
             Log().to_log("Repeater not connected")
 
     def sip_logic(self):
         sipData, sipAddr = self.SipSocket.recive()
-        #self.sipAddr =sipAddr
         msg = sipData.decode()
         self.sip_message.parse(msg)
         Log().to_log(self.sip_message.get_method())
@@ -37,14 +50,19 @@ class SIP(object):
             if sipAddr[0] in self.sipAddr:
                 self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
             else:
-                self.sipAddr[sipAddr[0]] = int(sipAddr[1])
+                self.sipAddr[sipAddr[0]] = ServerConnection(socket=sipAddr, voice_socket=ServerSocket(port = self.voice_port))
+                self.voice_port = self.voice_port + 2
                 Log().to_log("Add to base: " + sipAddr[0] + " " + str(sipAddr[1]))
                 self.SipSocket.send(self.sip_message.make_unauthorized().encode(), sipAddr)
 
+        if sipAddr[0] not in self.sipAddr:
+            self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
+            self.SipSocket.send(self.sip_message.make_unauthorized().encode(), sipAddr)
+            return
 
         if self.sip_message.get_method() == "OPTIONS":
             self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
-            self.press_ptt()
+            self.transmit()
 
         if self.sip_message.get_method() == "BYE":
             self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
@@ -64,11 +82,9 @@ class SIP(object):
         if self.sip_message.get_method() == "INVITE":
             self.SipSocket.send(self.sip_message.make_trying().encode(), sipAddr)
             self.SipSocket.send(self.sip_message.make_ringing().encode(), sipAddr)
-            self.sip_message.add_body(
-                "v=0\r\no=1001 0 0 IN IP4 10.21.10.125\r\ns=A conversation\r\nc=IN IP4 10.21.10.125\r\nt=0 0\r\nm=audio 30000 RTP/AVP 8\r\na=rtpmap:8 PCMA/8000")
+            self.sip_message.add_body(SdpMessage(owner_sip_id=1001).get_message())
             self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
-            rtpProcess = Thread(target=RTP, args=(self.RtpSocket,))
-            rtpProcess.start()
+            self.recive()
 
         if self.sip_message.get_method() == "100":
             self.SipSocket.send(self.sip_message.make_ack().encode(), sipAddr)
@@ -76,6 +92,37 @@ class SIP(object):
 
         if self.sip_message.get_method() == "180":
             pass
+
+class SdpMessage:
+    def __init__(self, owner_sip_id=Configuration().server_sip_id, ip=Configuration().server_ip, rdp_port=Configuration().server_voice_port):
+        self.owner = str(owner_sip_id) + " 0 0 IN IP4 " + ip
+        self.version = str(0)
+        self.session_name = "A conversation"
+        self.connection_information = "IN IP4" + ip
+        self.time_activate = "0 0"
+        self.media_description = "audio "+str(rdp_port)+" RTP/AVP 8"
+        self.media_attribute = 'rtpmap:8 PCMA/8000'
+        self._SPLITTER = "\r\n"
+        self.msg = self._generate_msg()
+
+
+    def _generate_msg(self):
+        msg = {}
+        msg["v"] = self.version
+        msg["o"] = self.owner
+        msg["s"] = self.session_name
+        msg["C"] = self.connection_information
+        msg["t"] = self.time_activate
+        msg["m"] = self.media_description
+        msg["a"] = self.media_attribute
+        return msg
+
+    def get_message(self):
+        msg=""
+        for k,v in self.msg.items():
+            msg += k + "=" + v + self._SPLITTER
+        return msg
+
 
 class SipMessage(object):
     def __init__(self):
@@ -88,7 +135,8 @@ class SipMessage(object):
                          '400': 'SIP/2.0 400 Bad Request',
                          '401': 'SIP/2.0 401 Unauthorized',
                          '100': 'SIP/2.0 100 Trying',
-                         '180': 'SIP/2.0 180 Ringing'}
+                         '180': 'SIP/2.0 180 Ringing',
+                         '603': 'SIP/2.0 603 Decline'}
 
         self._REQUEST = {'INV': 'INVITE',
                          'ACK': 'ACK',
@@ -154,11 +202,13 @@ class SipMessage(object):
             return self._header["Content-Length"]
         except:
             Log().to_log("Content-Length does not exist")
+
     def get_ais_msg_id(self):
         try:
             return self._header["Ais-Msg-id"]
         except:
             Log().to_log("Ais-Msg-i does not exist")
+
     def get_method(self):
         for k in self._REQUEST:
             if self._type.__contains__(self._REQUEST[k]):
@@ -192,37 +242,36 @@ class SipMessage(object):
     def make_trying(self):
         return self._ANSWERS['100'] + self._SPLITTER + self.__make_msg()
 
-    def add_body(self,str):
+    def add_body(self, str):
         self._body = str + self._SPLITTER
 
-
     def make_ack(self):
-        msg =  self._REQUEST["ACK"] + " sip:100@10.21.207.50:19888 SIP/2.0" + self._SPLITTER
+        msg = self._REQUEST["ACK"] + " sip:100@10.21.207.50:" + str(Configuration().server_port) + " SIP/2.0" + self._SPLITTER
         self._header["CSeq"] = "20 INVITE"
         self._header["Content-Type"] = "application/sdp"
-        self._header["Via"] = self._header["Via"].replace("10.21.207.50", "10.21.10.125")
-        self._header["From"] = self._header["From"].replace("1000@10.21.207.50", "2000@10.21.10.125")
-        self._header["To"] = self._header["To"].replace("10.21.10.125", "10.21.207.50")
+        self._header["Via"] = self._header["Via"].replace("10.21.207.50", ""+ Configuration().server_ip+ "")
+        self._header["From"] = self._header["From"].replace("1000@10.21.207.50", "2000@" + Configuration().server_ip)
+        self._header["To"] = self._header["To"].replace(Configuration().server_ip, "10.21.207.50")
         self._header["Ais - Reach"] = "group"
         self._header["Ais - Options"] = " priority = 0; slot = 1; OnlineCallID = 2; method = patcs; AutoFloor = 0"
         self._header["Ais - Msg - id"] = "repeater - id = 1000"
         for key in self._header:
             msg += key + ":" + self._header[key] + self._SPLITTER
         msg += self._SPLITTER
-        msg = "ACK sip:100@10.21.207.50:19888 SIP/2.0\r\nVia: SIP/2.0/UDP 10.21.10.125:19888;rport;branch=z9hG4bK1141423468\r\nFrom: <sip:16775904@10.21.10.125:19888>;tag=1024850604\r\nTo: <sip:100@10.21.207.50:19888>;tag=1363084463\r\nCall-ID: 316566532\r\nCSeq: 20 ACK\r\nContact: <sip:16775904@10.21.10.125:19888>\r\nMax-Forwards: 70\r\nUser-Agent: PD200 Server\r\nContent-Length: 0\r\n"
+        msg = "ACK sip:100@10.21.207.50:" + str(Configuration().server_port) + " SIP/2.0\r\nVia: SIP/2.0/UDP "+ Configuration().server_ip + ":" + str(Configuration().server_port) + ";rport;branch=z9hG4bK1141423468\r\nFrom: <sip:16775904@"+ Configuration().server_ip + ":" + str(Configuration().server_port) + ">;tag=1024850604\r\nTo: <sip:100@10.21.207.50:"+ str(Configuration().server_port) + ">;tag=1363084463\r\nCall-ID: 316566532\r\nCSeq: 20 ACK\r\nContact: <sip:16775904@"+ Configuration().server_ip+ ":" + str(Configuration().server_port) + ">\r\nMax-Forwards: 70\r\nUser-Agent: PD200 Server\r\nContent-Length: 0\r\n"
 
         return msg
 
     def make_invite(self):
-        msg = self._REQUEST["INV"] + " sip:100@10.21.207.50:19888 SIP/2.0" + self._SPLITTER
-        body = "v=0\r\no=1001 0 0 IN IP4 10.21.10.125\r\ns=A conversation\r\nc=IN IP4 10.21.10.125\r\nt=0 0\r\nm=audio 30000 RTP/AVP 8\r\na=rtpmap:8 PCMA/8000" + self._SPLITTER
+        '''msg = self._REQUEST["INV"] + " sip:100@10.21.207.50:"+ Configuration().server_port+ " SIP/2.0" + self._SPLITTER
+        body = "v=0\r\no=1001 0 0 IN IP4 "+ Configuration().server_ip+ "\r\ns=A conversation\r\nc=IN IP4 "+ Configuration().server_ip+ "\r\nt=0 0\r\nm=audio 30000 RTP/AVP 8\r\na=rtpmap:8 PCMA/8000" + self._SPLITTER
         self._header["Content-Length"] = str(len(body))
         self._header["CSeq"] = "20 INVITE"
         self._header["Content-Type"] = "application/sdp"
-        self._header["Via"] = self._header["Via"].replace("10.21.207.50","10.21.10.125")
-        self._header["From"] = self._header["From"].replace("1000@10.21.207.50", "2000@10.21.10.125")
-        self._header["To"] = self._header["To"].replace("10.21.10.125","10.21.207.50")
-        self._header["Contact"] = self._header["Contact"].replace("10.21.10.125", "10.21.207.50")
+        self._header["Via"] = self._header["Via"].replace("10.21.207.50",""+ Configuration().server_ip+ "")
+        self._header["From"] = self._header["From"].replace("1000@10.21.207.50", "2000@"+ Configuration().server_ip+ "")
+        self._header["To"] = self._header["To"].replace(""+ Configuration().server_ip+ "","10.21.207.50")
+        self._header["Contact"] = self._header["Contact"].replace(""+ Configuration().server_ip+ "", "10.21.207.50")
         self._header["Ais - Reach"] = "group"
         self._header["Ais - Options"] =" priority = 0; slot = 1; OnlineCallID = 2; method = patcs; AutoFloor = 0"
         self._header["Ais - Msg - id"] = "repeater - id = 1000"
@@ -230,6 +279,6 @@ class SipMessage(object):
         for key in self._header:
             msg += key + ":" + self._header[key] + self._SPLITTER
         msg += self._SPLITTER
-        msg += body
-        msg2 = "INVITE sip:100@10.21.207.50:19888 SIP/2.0\r\nVia: SIP/2.0/UDP 10.21.10.125:19888;rport;branch=z9hG4bK1847869345\r\nFrom: <sip:16775904@10.21.10.125:19888>;tag=1085229703\r\nTo: <sip:100@10.21.207.50:19888>\r\nCall-ID: 2176886565\r\nCSeq: 20 INVITE\r\nContact: <sip:16775904@10.21.10.125:19888>\r\nContent-Type: application/sdp\r\nMax-Forwards: 70\r\nUser-Agent: MY Server\r\nSubject: This is a call for a conversation\r\nAis-Reach: group\r\nAis-Options: priority=0;slot=1;OnlineCallID=2;method=patcs;AutoFloor=0\r\nAis-Msg-id: repeater-id=1000\r\nContent-Length:   145\r\n\r\nv=0\r\no=DPS 0 0 IN IP4 10.21.10.125\r\ns=A conversation\r\nc=IN IP4 10.21.10.125\r\nt=0 0\r\nm=audio 30000 RTP/AVP 8\r\na=rtpmap:8 PCMA/8000/1\r\na=sendrecv\r\n"
+        msg += body'''
+        msg2 = "INVITE sip:100@10.21.207.50:" + str(Configuration().server_port) + " SIP/2.0\r\nVia: SIP/2.0/UDP " + Configuration().server_ip + ":" + str(Configuration().server_port) + ";rport;branch=z9hG4bK1847869345\r\nFrom: <sip:16775904@" + Configuration().server_ip + ":" + str(Configuration().server_port) + ">;tag=1085229703\r\nTo: <sip:100@10.21.207.50:" + str(Configuration().server_port) + ">\r\nCall-ID: 2176886565\r\nCSeq: 20 INVITE\r\nContact: <sip:16775904@" + Configuration().server_ip + ":" + str(Configuration().server_port) + ">\r\nContent-Type: application/sdp\r\nMax-Forwards: 70\r\nUser-Agent: MY Server\r\nSubject: This is a call for a conversation\r\nAis-Reach: group\r\nAis-Options: priority=0;slot=1;OnlineCallID=2;method=patcs;AutoFloor=0\r\nAis-Msg-id: repeater-id=1000\r\nContent-Length:   145\r\n\r\nv=0\r\no=DPS 0 0 IN IP4 "+ Configuration().server_ip+ "\r\ns=A conversation\r\nc=IN IP4 "+ Configuration().server_ip+ "\r\nt=0 0\r\nm=audio 30000 RTP/AVP 8\r\na=rtpmap:8 PCMA/8000/1\r\na=sendrecv\r\n"
         return msg2
