@@ -1,6 +1,6 @@
 import struct
 from threading import Event
-from Server.Log import Log
+from Log import Log
 
 class RTP(object):
 
