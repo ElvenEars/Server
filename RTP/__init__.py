@@ -51,6 +51,21 @@ class RTP(object):
         rtp_header = self._rtp_version + rtp_seq + rtp_time + self._rtp_sync + self._rtp_profile + self._rtp_ext
         return rtp_header
 
+    def rtp_start(self):
+        rtpAddr = (Configuration().server_ip, int(Configuration().server_voice_port))
+        self.RtpSocket.send(self._start, rtpAddr)
+        self.RtpSocket.send(self._rtp_resp1, rtpAddr)
+        self.RtpSocket.send(self._rtp_resp2, rtpAddr)
+        self.RtpSocket.send(self._rtp_resp3, rtpAddr)
+
+    def rtp_send(self, data):
+        rtpAddr = (Configuration().server_ip, int(Configuration().server_voice_port))
+        self.RtpSocket.send(self._generate_rtp_header() + data, rtpAddr)
+
+    def rtp_end(self):
+        rtpAddr = (Configuration().server_ip, int(Configuration().server_voice_port))
+        self.RtpSocket.send(self._pre_end, rtpAddr)
+        
     def rtp_logic(self):
         rtpData, rtpAddr = self.RtpSocket.recive()
 

@@ -37,7 +37,7 @@ class SIP(object):
             for k in self.sipAddr:
                 self.SipSocket.send(self.sip_message.make_trying().encode(), self.sipAddr[k].socket)
                 self.SipSocket.send(self.sip_message.make_ringing().encode(), self.sipAddr[k].socket)
-                self.sip_message.add_body(SdpMessage(owner_sip_id=1001).get_message())
+                self.sip_message.add_body(SdpMessage().get_message())
                 self.SipSocket.send(self.sip_message.make_OK().encode(), self.sipAddr[k].socket)
                 Thread(target=RTP, args=(self.sipAddr[k].voice_socket,)).start()
                 print(" recive to : " + self.sipAddr[k].voice_socket.ip + " : " + str(self.sipAddr[k].voice_socket.port))
@@ -58,11 +58,12 @@ class SIP(object):
                 Log().to_log("Add to base: " + sipAddr[0] + " " + str(sipAddr[1]))
                 self.SipSocket.send(self.sip_message.make_unauthorized().encode(), sipAddr)
 
+        ''' отклонение запросов
         if sipAddr[0] not in self.sipAddr:
-            self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
+            #self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
             self.SipSocket.send(self.sip_message.make_unauthorized().encode(), sipAddr)
             return
-
+        '''
         if self.sip_message.get_method() == "OPTIONS":
             self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
             self.transmit()
@@ -93,8 +94,8 @@ class SIP(object):
             pass
 
 class SdpMessage:
-    def __init__(self, owner_sip_id=Configuration().server_sip_id, ip=Configuration().server_ip, rdp_port=Configuration().server_voice_port):
-        self.owner = str(owner_sip_id) + " 0 0 IN IP4 " + ip
+    def __init__(self, ip=Configuration().server_ip, rdp_port=Configuration().server_voice_port):
+        self.owner = "SER 0 0 IN IP4 " + ip
         self.version = str(0)
         self.session_name = "A conversation"
         self.connection_information = "IN IP4 " + ip
@@ -238,6 +239,7 @@ class SipMessage(object):
         return self._ANSWERS['180'] + self._SPLITTER + self.__make_msg()
 
     def make_unauthorized(self):
+        self._header["Expires"] = "0"
         return self._ANSWERS['401'] + self._SPLITTER + self.__make_msg()
 
     def make_trying(self):
@@ -266,7 +268,7 @@ class SipMessage(object):
         client_ip = socket[0]
         client_port = str(socket[1])
         session_id = str(100)
-        body = SdpMessage(owner_sip_id="DPS").get_message()
+        body = SdpMessage().get_message()
         msg = self._REQUEST["INV"] + " sip:"+ session_id + "@" + client_ip + ":" + client_port + " SIP/2.0" + self._SPLITTER
         msg += "Via: SIP/2.0/UDP " + Configuration().server_ip + ":" + Configuration().server_port + ";rport;branch=z9hG4bK1847869345" + self._SPLITTER
         msg += "From: <sip:" + Configuration().server_sip_id + "@" + Configuration().server_ip + ":" + Configuration().server_port + ">;tag=1085229703" + self._SPLITTER
