@@ -47,6 +47,15 @@ class SIP(object):
         else:
             Log().to_log("Repeater not connected")
 
+    def resend(self, sipAddr):
+        if self.sipAddr != ():
+            for k in self.sipAddr:
+                if sipAddr[0] != k:
+                    self.SipSocket.send(self.sip_message.get_raw_msg().encode(), self.sipAddr[k].client_socket.addr)
+                    print(" transmit to : " + self.sipAddr[k].server_voice_socket.ip + " : " + str(self.sipAddr[k].server_voice_socket.port))
+        else:
+            Log().to_log("Repeater not connected")
+
     def recive(self, sipAddr):
         self.SipSocket.send(self.sip_message.make_trying().encode(), sipAddr)
         self.SipSocket.send(self.sip_message.make_ringing().encode(), sipAddr)
@@ -108,12 +117,12 @@ class SIP(object):
             Log().to_log(self.sip_message.get_message())
             Log().to_log(self.sip_message.get_ais_msg_id())
             self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
+            self.resend(sipAddr)
 
         if self.sip_message.get_method() == "INVITE":
             self.recive(sipAddr)
 
         if self.sip_message.get_method() == "100":
-            #self.SipSocket.send(self.sip_message.make_ack().encode(), sipAddr)
             pass
 
         if self.sip_message.get_method() == "180":
@@ -154,6 +163,7 @@ class SdpMessage:
 
 class SipMessage(object):
     def __init__(self):
+        self._raw_data = ""
         self._body = ""
         self._header = ""
         self._contact = ""
@@ -176,6 +186,7 @@ class SipMessage(object):
         self._SPLITTER = "\r\n"
 
     def parse(self, msg):
+        self._raw_data = msg
         self._body = msg.split(self._SPLITTER * 2)[1]
         d = dict()
         self._type = msg.split(self._SPLITTER * 2)[0].split(self._SPLITTER)[0]
@@ -246,6 +257,9 @@ class SipMessage(object):
             if self._type.__contains__(self._ANSWERS[k]):
                 return k
         return "NONE"
+
+    def get_raw_msg(self):
+        return self._raw_data
 
     def __make_msg(self):
         msg = ""
