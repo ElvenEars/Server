@@ -6,9 +6,11 @@ from Configuration import Configuration
 
 
 class ServerConnection:
-    def __init__(self, socket=tuple(), voice_socket=ServerSocket("", 0)):
-        self.socket = socket
-        self.voice_socket = voice_socket
+    def __init__(self, client_socket=ServerSocket("", 0,False), client_voice_socket=ServerSocket("", 0,False), server_socket=ServerSocket("", 0,False), server_voice_socket=ServerSocket("", 0,False)):
+        self.client_socket = client_socket
+        self.client_voice_socket = client_voice_socket
+        self.server_socket = server_socket
+        self.server_voice_socket = server_voice_socket
 
 
 class SIP(object):
@@ -23,26 +25,45 @@ class SIP(object):
         while True:
             self.sip_logic()
 
-    def transmit(self):
+    def transmit(self, sipAddr):
+        transmitList = {}
+        for k in self.sipAddr:
+            if sipAddr[0] != self.sipAddr[k].client_socket.ip:
+                transmitList[k] = self.sipAddr[k]
+        for t in transmitList:
+            self.SipSocket.send(self.sip_message.make_invite(transmitList[t].client_socket).encode(), transmitList[t].client_socket.addr)
+        Thread(target=RTP, args=(self.sipAddr[sipAddr[0]].server_voice_socket, transmitList)).start()
+        #Log().to_log(" transmit to : " + self.sipAddr[k].client_voice_socket.ip + " : " + str(self.sipAddr[k].client_voice_socket.port))
+
+    def old_transmit(self):
         if self.sipAddr != ():
             for k in self.sipAddr:
-                self.SipSocket.send(self.sip_message.make_invite(self.sipAddr[k].socket).encode(), self.sipAddr[k].socket)
-                Thread(target=RTP, args=(self.sipAddr[k].voice_socket,)).start()
-                print(" transmit to : " + self.sipAddr[k].voice_socket.ip + " : " + str(self.sipAddr[k].voice_socket.port))
+                self.SipSocket.send(self.sip_message.make_invite(self.sipAddr[k].client_socket).encode(),
+                                    self.sipAddr[k].client_socket.addr)
+                Thread(target=RTP, args=(self.sipAddr[k].server_voice_socket,)).start()
+                print(" transmit to : " + self.sipAddr[k].server_voice_socket.ip + " : " + str(
+                    self.sipAddr[k].server_voice_socket.port))
         else:
             Log().to_log("Repeater not connected")
 
-    def recive(self):
-        if self.sipAddr != ():
+    def recive(self, sipAddr):
+        self.SipSocket.send(self.sip_message.make_trying().encode(), sipAddr)
+        self.SipSocket.send(self.sip_message.make_ringing().encode(), sipAddr)
+        self.sip_message.add_body(SdpMessage().get_message())
+        self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
+        #Thread(target=RTP, args=(self.sipAddr[sipAddr[0]].server_voice_socket,)).start()
+        Log().to_log(" recive from : " + self.sipAddr[sipAddr[0]].client_voice_socket.ip + " : " + str(self.sipAddr[sipAddr[0]].client_voice_socket.port))
+        self.transmit(sipAddr)
+        '''if self.sipAddr != ():
             for k in self.sipAddr:
                 self.SipSocket.send(self.sip_message.make_trying().encode(), self.sipAddr[k].socket)
                 self.SipSocket.send(self.sip_message.make_ringing().encode(), self.sipAddr[k].socket)
                 self.sip_message.add_body(SdpMessage().get_message())
                 self.SipSocket.send(self.sip_message.make_OK().encode(), self.sipAddr[k].socket)
                 Thread(target=RTP, args=(self.sipAddr[k].voice_socket,)).start()
-                print(" recive to : " + self.sipAddr[k].voice_socket.ip + " : " + str(self.sipAddr[k].voice_socket.port))
+                Log().to_log(" recive to : " + self.sipAddr[k].voice_socket.ip + " : " + str(self.sipAddr[k].voice_socket.port))
         else:
-            Log().to_log("Repeater not connected")
+            Log().to_log("Repeater not connected")'''
 
     def sip_logic(self):
         sipData, sipAddr = self.SipSocket.recive()
@@ -53,7 +74,11 @@ class SIP(object):
             if sipAddr[0] in self.sipAddr:
                 self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
             else:
-                self.sipAddr[sipAddr[0]] = ServerConnection(socket=sipAddr, voice_socket=ServerSocket(port = self.voice_port))
+                client_socket = ServerSocket(ip = sipAddr[0], port = sipAddr[1], bind = False)
+                client_voice_socket = ServerSocket(ip = sipAddr[0], port = self.voice_port, bind = False)
+                #server_socket = ServerSocket(port = sipAddr[1])
+                server_voice_socket = ServerSocket(port = self.voice_port)
+                self.sipAddr[sipAddr[0]] = ServerConnection(client_socket = client_socket, client_voice_socket = client_voice_socket, server_voice_socket = server_voice_socket)
                 self.voice_port = self.voice_port + 2
                 Log().to_log("Add to base: " + sipAddr[0] + " " + str(sipAddr[1]))
                 self.SipSocket.send(self.sip_message.make_unauthorized().encode(), sipAddr)
@@ -66,7 +91,7 @@ class SIP(object):
         '''
         if self.sip_message.get_method() == "OPTIONS":
             self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
-            self.transmit()
+            #self.old_transmit()
 
         if self.sip_message.get_method() == "BYE":
             self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
@@ -84,7 +109,7 @@ class SIP(object):
             self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
 
         if self.sip_message.get_method() == "INVITE":
-            self.recive()
+            self.recive(sipAddr)
 
         if self.sip_message.get_method() == "100":
             #self.SipSocket.send(self.sip_message.make_ack().encode(), sipAddr)
@@ -265,8 +290,8 @@ class SipMessage(object):
         return msg'''
 
     def make_invite(self, socket):
-        client_ip = socket[0]
-        client_port = str(socket[1])
+        client_ip = socket.ip
+        client_port = str(socket.port)
         session_id = str(100)
         body = SdpMessage().get_message()
         msg = self._REQUEST["INV"] + " sip:"+ session_id + "@" + client_ip + ":" + client_port + " SIP/2.0" + self._SPLITTER
