@@ -32,6 +32,7 @@ class SIP(object):
                 transmitList[k] = self.sipAddr[k]
         for t in transmitList:
             self.SipSocket.send(self.sip_message.make_invite(transmitList[t].client_socket).encode(), transmitList[t].client_socket.addr)
+            self.SipSocket.send(self.sip_message.make_ack().encode(), transmitList[t].client_socket.addr)
         Thread(target=RTP, args=(self.sipAddr[sipAddr[0]].server_voice_socket, transmitList)).start()
         #Log().to_log(" transmit to : " + self.sipAddr[k].client_voice_socket.ip + " : " + str(self.sipAddr[k].client_voice_socket.port))
 
@@ -273,7 +274,7 @@ class SipMessage(object):
     def add_body(self, str):
         self._body = str + self._SPLITTER
 
-    '''def make_ack(self):
+    def make_ack(self):
         msg = self._REQUEST["ACK"] + " sip:100@10.21.207.50:" + str(Configuration().server_port) + " SIP/2.0" + self._SPLITTER
         self._header["CSeq"] = "20 INVITE"
         self._header["Content-Type"] = "application/sdp"
@@ -287,7 +288,8 @@ class SipMessage(object):
             msg += key + ":" + self._header[key] + self._SPLITTER
         msg += self._SPLITTER
         msg = "ACK sip:100@10.21.207.50:" + str(Configuration().server_port) + " SIP/2.0\r\nVia: SIP/2.0/UDP "+ Configuration().server_ip + ":" + str(Configuration().server_port) + ";rport;branch=z9hG4bK1141423468\r\nFrom: <sip:16775904@"+ Configuration().server_ip + ":" + str(Configuration().server_port) + ">;tag=1024850604\r\nTo: <sip:100@10.21.207.50:"+ str(Configuration().server_port) + ">;tag=1363084463\r\nCall-ID: 316566532\r\nCSeq: 20 ACK\r\nContact: <sip:16775904@"+ Configuration().server_ip+ ":" + str(Configuration().server_port) + ">\r\nMax-Forwards: 70\r\nUser-Agent: PD200 Server\r\nContent-Length: 0\r\n"
-        return msg'''
+        msg2 = "ACK sip:100@10.21.207.50:19888 SIP/2.0\r\nVia: SIP/2.0/UDP 10.21.10.125:19888;rport;branch=z9hG4bK3566632858\r\nFrom: <sip:16775904@10.21.10.125:19888>;tag=135355690\r\nTo: <sip:100@10.21.207.50:19888>;tag=450026454\r\nCall-ID: 667013138\r\nCSeq: 20 ACK\r\nContact: <sip:16775904@10.21.10.125:19888>\r\nMax-Forwards: 70\r\nUser-Agent: PD200 Server\r\nContent-Length: 0\r\n\r\n"
+        return msg2
 
     def make_invite(self, socket):
         client_ip = socket.ip

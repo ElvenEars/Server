@@ -108,7 +108,7 @@ class RTP(object):
                     break
                 #delay = time.time() - start_time
                 #Event().wait(0.0562-delay)
-                Log().to_log(str(time.time() - start_time))
+                #Log().to_log(str(time.time() - start_time))
                 Log().to_log(str(rtpData))
         '''
         rtpData, rtpAddr = self.RtpSocket.recive()
