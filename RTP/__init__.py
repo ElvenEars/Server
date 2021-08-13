@@ -3,6 +3,7 @@ from threading import Event
 from ServerSocket import ServerSocket
 from Log import Log
 import time
+from datetime import datetime
 
 class RTP(object):
 
@@ -75,7 +76,7 @@ class RTP(object):
     def rtp_logic(self):
 
         while True:
-            start_time = time.time()
+            Log().to_log("\nlisten " + self.RtpSocket.ip + " : " + str(self.RtpSocket.port))
             rtpData, rtpAddr = self.RtpSocket.recive()
             if rtpData == self._start:
                 for t in self.transmitList:
@@ -101,14 +102,11 @@ class RTP(object):
                     print(len(self._data))
                     for t in self.transmitList:
                         self.rtp_end(self.transmitList[t].client_voice_socket.addr, self.transmitList[t].server_voice_socket)
-                    wav = open("test.wav", "wb")
+                    wav = open(datetime.now().strftime("%d-%m-%Y %H.%M.%S")+".wav", "wb+")
                     wav.write(self.toWav(self._data))
                     wav.close()
                     self._data = b''
                     break
-                #delay = time.time() - start_time
-                #Event().wait(0.0562-delay)
-                #Log().to_log(str(time.time() - start_time))
                 Log().to_log(str(rtpData))
         '''
         rtpData, rtpAddr = self.RtpSocket.recive()

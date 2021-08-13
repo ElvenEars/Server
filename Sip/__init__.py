@@ -1,5 +1,5 @@
 from Log import Log
-from threading import Thread
+from threading import Thread, Event
 from RTP import RTP
 from ServerSocket import ServerSocket
 from Configuration import Configuration
@@ -32,7 +32,9 @@ class SIP(object):
                 transmitList[k] = self.sipAddr[k]
         for t in transmitList:
             self.SipSocket.send(self.sip_message.make_invite(transmitList[t].client_socket).encode(), transmitList[t].client_socket.addr)
-            self.SipSocket.send(self.sip_message.make_ack().encode(), transmitList[t].client_socket.addr)
+            Event().wait(0.67)
+           # self.SipSocket.send(self.sip_message.make_ack().encode(), transmitList[t].client_socket.addr)
+        #Event().wait(1)
         Thread(target=RTP, args=(self.sipAddr[sipAddr[0]].server_voice_socket, transmitList)).start()
         #Log().to_log(" transmit to : " + self.sipAddr[k].client_voice_socket.ip + " : " + str(self.sipAddr[k].client_voice_socket.port))
 
@@ -57,25 +59,20 @@ class SIP(object):
             Log().to_log("Repeater not connected")
 
     def recive(self, sipAddr):
-        self.SipSocket.send(self.sip_message.make_trying().encode(), sipAddr)
-        self.SipSocket.send(self.sip_message.make_ringing().encode(), sipAddr)
-        self.sip_message.add_body(SdpMessage().get_message())
-        self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
+        try:
+            self.SipSocket.send(self.sip_message.make_trying().encode(), sipAddr)
+            self.SipSocket.send(self.sip_message.make_ringing().encode(), sipAddr)
+            self.sip_message.add_body(SdpMessage().get_message())
+            self.SipSocket.send(self.sip_message.make_OK().encode(), sipAddr)
+        except:
+            pass
         #Thread(target=RTP, args=(self.sipAddr[sipAddr[0]].server_voice_socket,)).start()
         Log().to_log(" recive from : " + self.sipAddr[sipAddr[0]].client_voice_socket.ip + " : " + str(self.sipAddr[sipAddr[0]].client_voice_socket.port))
         self.transmit(sipAddr)
-        '''if self.sipAddr != ():
-            for k in self.sipAddr:
-                self.SipSocket.send(self.sip_message.make_trying().encode(), self.sipAddr[k].socket)
-                self.SipSocket.send(self.sip_message.make_ringing().encode(), self.sipAddr[k].socket)
-                self.sip_message.add_body(SdpMessage().get_message())
-                self.SipSocket.send(self.sip_message.make_OK().encode(), self.sipAddr[k].socket)
-                Thread(target=RTP, args=(self.sipAddr[k].voice_socket,)).start()
-                Log().to_log(" recive to : " + self.sipAddr[k].voice_socket.ip + " : " + str(self.sipAddr[k].voice_socket.port))
-        else:
-            Log().to_log("Repeater not connected")'''
+
 
     def sip_logic(self):
+        Log().to_log("\nlisten " + self.SipSocket.ip + " : " + str(self.SipSocket.port))
         sipData, sipAddr = self.SipSocket.recive()
         msg = sipData.decode()
         self.sip_message.parse(msg)
