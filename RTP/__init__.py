@@ -4,6 +4,8 @@ from ServerSocket import ServerSocket
 from Log import Log
 import time
 from datetime import datetime
+import audioop
+import wave
 
 class RTP(object):
 
@@ -102,9 +104,16 @@ class RTP(object):
                     print(len(self._data))
                     for t in self.transmitList:
                         self.rtp_end(self.transmitList[t].client_voice_socket.addr, self.transmitList[t].server_voice_socket)
-                    wav = open(datetime.now().strftime("%d-%m-%Y %H.%M.%S")+".wav", "wb+")
-                    wav.write(self.toWav(self._data))
+                    save = audioop.alaw2lin(self._data, 2 )
+                    wav = wave.open("records/" + datetime.now().strftime("%d-%m-%Y %H.%M.%S") + ".wav", 'wb')
+                    wav.setnchannels(1)
+                    wav.setsampwidth(2)
+                    wav.setframerate(8000)
+                    wav.writeframes(save)
                     wav.close()
+                    '''wav = open("records/" + datetime.now().strftime("%d-%m-%Y %H.%M.%S") + ".wav", "wb+")
+                    wav.write(self.toWav(save))
+                    wav.close()'''
                     self._data = b''
                     break
                 Log().to_log(str(rtpData))
