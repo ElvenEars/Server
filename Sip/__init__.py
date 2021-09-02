@@ -53,7 +53,9 @@ class SIP(object):
         if self.sipAddr != ():
             for k in self.sipAddr:
                 if sipAddr[0] != k:
-                    self.SipSocket.send(self.sip_message.get_raw_msg().encode(), self.sipAddr[k].client_socket.addr)
+                    self.sip_message.change_resend_addres(self.sipAddr[k].client_socket.addr)
+                    print(self.sip_message.get_full_msg())
+                    self.SipSocket.send(self.sip_message.get_full_msg().encode(), self.sipAddr[k].client_socket.addr)
                     print(" transmit to : " + self.sipAddr[k].server_voice_socket.ip + " : " + str(self.sipAddr[k].server_voice_socket.port))
         else:
             Log().to_log("Repeater not connected")
@@ -258,6 +260,14 @@ class SipMessage(object):
     def get_raw_msg(self):
         return self._raw_data
 
+    def get_full_msg(self):
+        msg = ""
+        msg += self._type + self._SPLITTER
+        for key in self._header:
+            msg += key + ":" + self._header[key] + self._SPLITTER
+        msg += self._SPLITTER + self._body
+        return msg
+
     def __make_msg(self):
         msg = ""
         try:
@@ -284,6 +294,17 @@ class SipMessage(object):
 
     def add_body(self, str):
         self._body = str + self._SPLITTER
+
+    def change_resend_addres(self, addr):
+        ip, port = addr
+        print (ip + " " + str(port))
+        self._type = self._type.split("@")[0] + "@" + ip + ":" + str(port) + " SIP/2.0"
+        sip_id = self._header["To"].split("@")[0].split(":")[1]
+        self._header["Via"] = "SIP/2.0/UDP " + Configuration().server_ip + ":" + Configuration().server_port + ";" + self._header["Via"].split(";")[1]+ ";" + self._header["Via"].split(";")[2]
+        self._header["From"] = self._header["From"].split("@")[0] + "@" + Configuration().server_ip + ":" + Configuration().server_port + ">" +self._header["From"].split(">")[1]
+        #self._header["Via"] = "Via: SIP/2.0/UDP 10.21.10.125:19888;rport;branch=z9hG4bK1124376070"
+        #self._header["From"] = "From: <sip:2001@10.21.10.125:19888>;tag=2053427036"
+        self._header["To"] = " <sip:"+sip_id+"@"+ip+":"+str(port)+">"
 
     def make_ack(self):
         msg = self._REQUEST["ACK"] + " sip:100@10.21.207.50:" + str(Configuration().server_port) + " SIP/2.0" + self._SPLITTER
