@@ -31,7 +31,8 @@ class SIP(object):
             if sipAddr[0] != self.sipAddr[k].client_socket.ip:
                 transmitList[k] = self.sipAddr[k]
         for t in transmitList:
-            self.SipSocket.send(self.sip_message.make_invite(transmitList[t].client_socket).encode(), transmitList[t].client_socket.addr)
+            repeater, group, slot = self.sip_message.get_repeater_group_slot()
+            self.SipSocket.send(self.sip_message.make_invite(socket = transmitList[t].client_socket, repeater=repeater , group = group, slot= slot).encode(), transmitList[t].client_socket.addr)
             Event().wait(0.67)
            # self.SipSocket.send(self.sip_message.make_ack().encode(), transmitList[t].client_socket.addr)
         #Event().wait(1)
@@ -256,7 +257,12 @@ class SipMessage(object):
             if self._type.__contains__(self._ANSWERS[k]):
                 return k
         return "NONE"
+    def get_repeater_group_slot(self):
 
+        group = self._header["To"].split(":")[1].split("@")[0]
+        repeater = self._header["Ais-Msg-id"].split("repeater-id=")[1]
+        slot = self._header["Ais-Options"].split("slot=")[1].split(";")[0]
+        return  repeater , group, slot
     def get_raw_msg(self):
         return self._raw_data
 
@@ -323,10 +329,10 @@ class SipMessage(object):
         msg2 = "ACK sip:100@10.21.207.50:19888 SIP/2.0\r\nVia: SIP/2.0/UDP 10.21.10.125:19888;rport;branch=z9hG4bK3566632858\r\nFrom: <sip:16775904@10.21.10.125:19888>;tag=135355690\r\nTo: <sip:100@10.21.207.50:19888>;tag=450026454\r\nCall-ID: 667013138\r\nCSeq: 20 ACK\r\nContact: <sip:16775904@10.21.10.125:19888>\r\nMax-Forwards: 70\r\nUser-Agent: PD200 Server\r\nContent-Length: 0\r\n\r\n"
         return msg2
 
-    def make_invite(self, socket):
+    def make_invite(self, socket = None, slot = "1", repeater = "1000" , group = "100" ):
         client_ip = socket.ip
         client_port = str(socket.port)
-        session_id = str(100)
+        session_id = group
         body = SdpMessage().get_message()
         msg = self._REQUEST["INV"] + " sip:"+ session_id + "@" + client_ip + ":" + client_port + " SIP/2.0" + self._SPLITTER
         msg += "Via: SIP/2.0/UDP " + Configuration().server_ip + ":" + Configuration().server_port + ";rport;branch=z9hG4bK1847869345" + self._SPLITTER
@@ -341,8 +347,8 @@ class SipMessage(object):
         msg += "Subject: This is a call for a conversation"+ self._SPLITTER
         #AIS params
         msg += "Ais-Reach: group"+ self._SPLITTER
-        msg += "Ais-Options: priority=0;slot=1;OnlineCallID=2;method=patcs;AutoFloor=0"+ self._SPLITTER
-        msg += "Ais-Msg-id: repeater-id=1000"+ self._SPLITTER
+        msg += "Ais-Options: priority=0;slot="+slot+";OnlineCallID=2;method=patcs;AutoFloor=0"+ self._SPLITTER
+        msg += "Ais-Msg-id: repeater-id=" + repeater + self._SPLITTER
         # AIS params
         msg += "Content-Length:   "+str(len(body)) + self._SPLITTER*2
         msg += body
