@@ -9,10 +9,11 @@ import wave
 
 class RTP(object):
 
-    def __init__(self, RtpSocket = ServerSocket("",0,False), transmitList = {}):
+    def __init__(self, RtpSocket = ServerSocket("",0,False), transmitList = {}, slot = "2"):
         self._data = b''
         self.RtpSocket = RtpSocket
         self.transmitList = transmitList
+        self.slot = slot
         self._rtp_seq_int = 0
         self._rtp_time_int = 0
         self._timespan = 480
@@ -82,9 +83,13 @@ class RTP(object):
             rtpData, rtpAddr = self.RtpSocket.recive()
             if rtpData == self._start:
                 for t in self.transmitList:
-                    self.rtp_start(self.transmitList[t].client_voice_socket.addr, self.transmitList[t].server_voice_socket)
-                    Log().to_log(" transmit to : " + self.transmitList[t].client_voice_socket.ip + " : " + str(
-                        self.transmitList[t].client_voice_socket.port))
+                    if( self.slot=="2"):
+                        self.rtp_start(self.transmitList[t].client_voice_socket_s2.addr, self.transmitList[t].server_voice_socket_s2)
+                    else:
+                        self.rtp_start(self.transmitList[t].client_voice_socket_s1.addr,
+                                       self.transmitList[t].server_voice_socket_s1)
+                    Log().to_log(" transmit to : " + self.transmitList[t].client_voice_socket_s1.ip + " : " + str(
+                        self.transmitList[t].client_voice_socket_s1.port))
                 #self.RtpSocket.send(self._rtp_resp1, rtpAddr)
                 #self.RtpSocket.send(self._rtp_resp2, rtpAddr)
                 #self.RtpSocket.send(self._rtp_resp3, rtpAddr)
@@ -94,16 +99,24 @@ class RTP(object):
                     data = rtpData[40:]
                     self._data += data
                     for t in self.transmitList:
-                        message = self._generate_rtp_header(self.transmitList[t].server_voice_socket.rtp_seq_int, self.transmitList[t].server_voice_socket.rtp_time_int) + data
-                        self.transmitList[t].server_voice_socket.rtp_seq_int += 1
-                        self.transmitList[t].server_voice_socket.rtp_time_int += self._timespan
-                        self.rtp_send(message, self.transmitList[t].client_voice_socket.addr, self.transmitList[t].server_voice_socket)
+                        message = self._generate_rtp_header(self.transmitList[t].server_voice_socket_s1.rtp_seq_int, self.transmitList[t].server_voice_socket_s1.rtp_time_int) + data
+                        self.transmitList[t].server_voice_socket_s1.rtp_seq_int += 1
+                        self.transmitList[t].server_voice_socket_s1.rtp_time_int += self._timespan
+                        if(self.slot == "2"):
+                            self.rtp_send(message, self.transmitList[t].client_voice_socket_s2.addr, self.transmitList[t].server_voice_socket_s2)
+                        else:
+                            self.rtp_send(message, self.transmitList[t].client_voice_socket_s1.addr,
+                                          self.transmitList[t].server_voice_socket_s1)
 
 
                 if len(rtpData) == 48 and rtpData[40:] == self._end and len(self._data) != 0:
                     print(len(self._data))
                     for t in self.transmitList:
-                        self.rtp_end(self.transmitList[t].client_voice_socket.addr, self.transmitList[t].server_voice_socket)
+                        if( self.slot == "2"):
+                            self.rtp_end(self.transmitList[t].client_voice_socket_s2.addr, self.transmitList[t].server_voice_socket_s2)
+                        else:
+                            self.rtp_end(self.transmitList[t].client_voice_socket_s1.addr,
+                                         self.transmitList[t].server_voice_socket_s1)
                     save = audioop.alaw2lin(self._data, 2 )
                     wav = wave.open("records/" + datetime.now().strftime("%d-%m-%Y %H.%M.%S") + ".wav", 'wb')
                     wav.setnchannels(1)

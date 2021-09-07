@@ -1,5 +1,6 @@
 import socket
 from Configuration import Configuration
+from datetime import datetime
 
 class ServerSocket(object):
 
@@ -10,7 +11,7 @@ class ServerSocket(object):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.rtp_seq_int = 0
-        self.rtp_time_int = 0
+        self.rtp_time_int = 1631013671
         if bind:
             self.sock.bind((self.ip, int(self.port)))
 
