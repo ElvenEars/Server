@@ -6,7 +6,7 @@ from Configuration import Configuration
 
 
 class ServerConnection:
-    def __init__(self, client_socket=ServerSocket("", 0,False), client_voice_socket_s1=ServerSocket("", 0,False), client_voice_socket_s2=ServerSocket("", 0,False), server_socket=ServerSocket("", 0,False), server_voice_socket_s1=ServerSocket("", 0,False), server_voice_socket_s2=ServerSocket("", 0,False)):
+    def __init__(self, client_socket=ServerSocket("", 0, False), client_voice_socket_s1=ServerSocket("", 0, False), client_voice_socket_s2=ServerSocket("", 0, False), server_socket=ServerSocket("", 0, False), server_voice_socket_s1=ServerSocket("", 0, False), server_voice_socket_s2=ServerSocket("", 0, False)):
         self.client_socket = client_socket
         self.client_voice_socket_s1 = client_voice_socket_s1
         self.client_voice_socket_s2 = client_voice_socket_s2
@@ -37,7 +37,7 @@ class SIP(object):
             rdp_port =  transmitList[t].client_voice_socket_s1.port if slot == "1" else  transmitList[t].client_voice_socket_s2.port
             self.SipSocket.send(self.sip_message.make_invite(socket = transmitList[t].client_socket, repeater=repeater , group = group, slot= slot, rdp_port = str(rdp_port)).encode(), transmitList[t].client_socket.addr)
             Event().wait(0.3)
-        Thread(target=RTP, args=(self.sipAddr[sipAddr[0]].server_voice_socket_s1, transmitList, slot)).start()
+        Thread(target=RTP, args=(self.sipAddr[sipAddr[0]].server_voice_socket_s1, transmitList, slot, group)).start()
 
     def old_transmit(self):
         if self.sipAddr != ():
